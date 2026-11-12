@@ -340,6 +340,7 @@ public class LimitService extends AccessibilityService {
         profileReelsNoticed = false;
         if (leaving) { leaving = false; setKeyboardHidden(false); }
         feedRowsSeen.clear();   // al volver, Instagram puede traer otras publicaciones
+        feedScrollToken++;      // si estaba subiendo el Inicio, deja de hacerlo
         hideFeedPill();
         xCovered = false;
         cancelNotice();
@@ -591,11 +592,19 @@ public class LimitService extends AccessibilityService {
         lastFeedSnap = now;
         updateFeedPill(root, IG);
         note("Inicio: límite de publicaciones, vuelvo arriba");
-        // Tocar Inicio estando en el Inicio lo sube arriba de todo. Por las dudas, además
-        // se sube la lista de a una pantalla hasta llegar al principio.
-        clickHome(root);
-        if (list != null) scrollFeedUp(list, 0);
+        // No se toca el botón Inicio: en Instagram eso además actualiza el Inicio. Se sube
+        // la lista de a una pantalla, con su animación, y se frena justo arriba de todo
+        // (sin pasarse, así no parece que tiraste hacia abajo para actualizar).
+        Rect screen = new Rect();
+        root.getBoundsInScreen(screen);
+        AccessibilityNodeInfo vertical = findVerticalList(root, screen);
+        if (vertical != null) list = vertical;
+        if (list == null) return;
+        feedScrollToken++;
+        scrollFeedUp(list, 0, feedScrollToken);
     }
+
+    private int feedScrollToken;   // cambia en cada subida: la anterior deja de seguir
 
     private Overlay feedPill;       // "N/30" en el Inicio de Instagram
     private String feedPillText;    // lo que muestra ahora (null: no está a la vista)
@@ -629,8 +638,12 @@ public class LimitService extends AccessibilityService {
         if (feedPill != null) feedPill.hide();
     }
 
-    private void scrollFeedUp(AccessibilityNodeInfo list, int attempt) {
-        if (attempt >= 40) return;
+    /**
+     * Sube una pantalla y, cuando la animación va por la mitad, la siguiente: queda un
+     * movimiento continuo hacia arriba. Al llegar arriba de todo, para.
+     */
+    private void scrollFeedUp(AccessibilityNodeInfo list, int attempt, int token) {
+        if (attempt >= 80 || token != feedScrollToken) return;
         try {
             list.refresh();
             if (!canScrollBack(list)) return;   // ya está arriba de todo
@@ -638,7 +651,7 @@ public class LimitService extends AccessibilityService {
         } catch (Exception ignored) {
             return;
         }
-        handler.postDelayed(() -> scrollFeedUp(list, attempt + 1), 60);
+        handler.postDelayed(() -> scrollFeedUp(list, attempt + 1, token), 140);
     }
 
     // ------------------------------------------------------------- WhatsApp
