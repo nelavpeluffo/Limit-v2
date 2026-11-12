@@ -470,10 +470,23 @@ public class LimitService extends AccessibilityService {
             IG + ":id/row_feed_photo_profile_name",
     };
 
-    /** Lugares de la lista del Inicio ya contados en esta visita a Instagram. */
-    private final HashSet<Integer> feedRowsSeen = new HashSet<>();
+    /**
+     * Publicaciones del Inicio ya contadas en esta visita a Instagram: por su lugar en la
+     * lista ("r12") o, si Instagram no lo informa, por el nombre de la cuenta ("n…").
+     * Queda solo en memoria y se borra al salir de Instagram.
+     */
+    private final HashSet<String> feedRowsSeen = new HashSet<>();
     private long lastFeedCheck;
     private long lastFeedSnap;
+    private AccessibilityNodeInfo feedLastList;
+    /** Revisión final, cuando el Inicio deja de moverse (ahí se ve la publicación nueva). */
+    private final Runnable feedSettled = () -> {
+        try {
+            AccessibilityNodeInfo root = getRootInActiveWindow();
+            if (root != null && IG.contentEquals(root.getPackageName())) countFeed(root, null);
+        } catch (Exception ignored) {
+        }
+    };
 
     /**
      * Deslizando el Inicio: cuenta las publicaciones nuevas que aparecen. Con las 30 del
@@ -483,17 +496,30 @@ public class LimitService extends AccessibilityService {
         long now = SystemClock.elapsedRealtime();
         boolean limit = usage.feedLimitReached();
         boolean down = android.os.Build.VERSION.SDK_INT < 28 || e.getScrollDeltaY() > 0;
-        // Con el límite cumplido se reacciona enseguida; si no, alcanza con revisar cada 0,25 s.
-        if (!limit && now - lastFeedCheck < 250) return;
+        // Cuando el Inicio se queda quieto se revisa una vez más: un deslizamiento rápido
+        // puede terminar entre dos revisiones, y ahí se perdía la publicación nueva.
+        handler.removeCallbacks(feedSettled);
+        handler.postDelayed(feedSettled, 300);
+        if (!limit && now - lastFeedCheck < 120) return;
         lastFeedCheck = now;
         try {
             AccessibilityNodeInfo root = getRootInActiveWindow();
             if (root == null || !IG.contentEquals(root.getPackageName())) return;
-            if (!homeSelected(root) || reelsPlayerFullScreen(root)) return;
             if (limit) {
-                if (down) snapFeedToTop(root, e.getSource());
+                if (down && homeSelected(root) && !reelsPlayerFullScreen(root)) snapFeedToTop(root, e.getSource());
                 return;
             }
+            countFeed(root, e);
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Suma al contador cada nombre de cuenta (encabezado de publicación) nuevo a la vista. */
+    private void countFeed(AccessibilityNodeInfo root, AccessibilityEvent e) {
+        try {
+            if (!homeSelected(root) || reelsPlayerFullScreen(root)) return;
+            if (usage.feedLimitReached()) return;
+            if (e != null && e.getSource() != null) feedLastList = e.getSource();
             int added = 0, headers = 0;
             StringBuilder rows = Diag.recording() ? new StringBuilder() : null;
             for (String id : IG_POST_HEADER_IDS) {
@@ -503,7 +529,8 @@ public class LimitService extends AccessibilityService {
                     if (n == null || !n.isVisibleToUser()) continue;
                     headers++;
                     int row = rowOf(n);
-                    boolean isNew = row >= 0 && feedRowsSeen.add(row);
+                    String key = row >= 0 ? "r" + row : nameKey(n);
+                    boolean isNew = key != null && feedRowsSeen.add(key);
                     if (isNew) added++;
                     if (rows != null) {
                         Rect b = new Rect();
@@ -516,13 +543,16 @@ public class LimitService extends AccessibilityService {
             }
             if (rows != null) {
                 // Solo números y nombres internos: nada de lo que dice la publicación.
-                AccessibilityNodeInfo src = e.getSource();
-                String srcId = src == null ? null : src.getViewIdResourceName();
-                note("Inicio scroll: dy=" + (android.os.Build.VERSION.SDK_INT >= 28 ? e.getScrollDeltaY() : 0)
-                        + " desde=" + e.getFromIndex() + " hasta=" + e.getToIndex()
-                        + " items=" + e.getItemCount()
-                        + " lista=" + (srcId == null ? "?" : srcId.substring(srcId.indexOf('/') + 1))
-                        + " encabezados=" + headers + " nuevos=" + added
+                String ev = "quieto";
+                if (e != null) {
+                    AccessibilityNodeInfo src = e.getSource();
+                    String srcId = src == null ? null : src.getViewIdResourceName();
+                    ev = "dy=" + (android.os.Build.VERSION.SDK_INT >= 28 ? e.getScrollDeltaY() : 0)
+                            + " desde=" + e.getFromIndex() + " hasta=" + e.getToIndex()
+                            + " items=" + e.getItemCount()
+                            + " lista=" + (srcId == null ? "?" : srcId.substring(srcId.indexOf('/') + 1));
+                }
+                note("Inicio " + ev + " encabezados=" + headers + " nuevos=" + added
                         + " total=" + usage.feedPosts() + " |" + rows);
             }
             if (added > 0) {
@@ -530,10 +560,28 @@ public class LimitService extends AccessibilityService {
                 int seen = usage.feedPosts();
                 note("Inicio: " + seen + " publicaciones vistas hoy");
                 updateFeedPill(root, IG);
-                if (seen >= Usage.FEED_POSTS_LIMIT) snapFeedToTop(root, e.getSource());
+                if (seen >= Usage.FEED_POSTS_LIMIT) snapFeedToTop(root, feedLastList);
             }
         } catch (Exception ignored) {
         }
+    }
+
+    /**
+     * Si Instagram no dice en qué lugar de la lista está la publicación, se la reconoce
+     * por el nombre de la cuenta (solo para no contarla dos veces; no se guarda).
+     */
+    private static String nameKey(AccessibilityNodeInfo n) {
+        CharSequence t = n.getText();
+        if (t == null || t.length() == 0) t = n.getContentDescription();
+        if ((t == null || t.length() == 0) && n.getChildCount() > 0) {
+            for (int i = 0; i < n.getChildCount() && i < 6; i++) {
+                AccessibilityNodeInfo c = n.getChild(i);
+                if (c == null) continue;
+                t = c.getText();
+                if (t != null && t.length() > 0) break;
+            }
+        }
+        return t == null || t.length() == 0 ? null : "n" + t;
     }
 
     /** Lleva el Inicio arriba de todo (como tocar el botón Inicio) y avisa por qué. */
