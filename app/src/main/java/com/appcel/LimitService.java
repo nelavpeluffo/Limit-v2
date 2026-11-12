@@ -674,19 +674,29 @@ public class LimitService extends AccessibilityService {
         if (waTicking) return;
         waTicking = true;
         waLastTick = SystemClock.elapsedRealtime();
+        waEarnedAtOpen = usage.earned();   // el reloj arranca de cero en cada visita
         showWhatsAppPill();
         handler.postDelayed(waTickRunnable, TICK_MS);
     }
 
-    /** "Ganaste 2:13 de 15:00", con el reloj, sumando cada segundo. */
+    private long waEarnedAtOpen;   // tiempo ya ganado hoy al abrir WhatsApp esta vez
+
+    /**
+     * "Ganaste 0:42": lo ganado en esta visita a WhatsApp, desde cero. El total del día
+     * se ve en Reels, Para ti y demás, en el reloj que baja.
+     */
     private void showWhatsAppPill() {
         if (!AppSettings.overlayEnabled(this)) {
             waPill.hide();
             return;
         }
-        long earned = usage.earned();
-        if (usage.fullyEarned()) waPill.show("Ganaste " + Usage.format(earned) + " · completo", Overlay.VIOLET);
-        else waPill.show("Ganaste " + Usage.format(earned) + " de 15:00", Overlay.DARK);
+        long now = usage.earned() - waEarnedAtOpen;
+        if (usage.fullyEarned()) {
+            waPill.show(now > 0 ? "Ganaste " + Usage.format(now) + " · ya tenés los 15:00 de hoy"
+                    : "Ya ganaste los 15:00 de hoy", Overlay.VIOLET);
+        } else {
+            waPill.show("Ganaste " + Usage.format(now), Overlay.DARK);
+        }
     }
 
     /**
