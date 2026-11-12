@@ -21,9 +21,9 @@ final class LockNotice {
         hideRunnable = pill::hide;
     }
 
-    void show() {
+    void show(String text) {
         handler.removeCallbacks(hideRunnable);
-        pill.showGlowing("Reels bloqueados hasta mañana", Overlay.VIOLET);
+        pill.showGlowing(text, Overlay.VIOLET);
         handler.postDelayed(hideRunnable, SHOW_MS);
     }
 

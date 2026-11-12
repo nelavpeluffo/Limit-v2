@@ -29,9 +29,9 @@ public class MainActivity extends Activity {
     };
 
     private Usage usage;
-    private TextView status, reelsText, xText, diagStatus;
+    private TextView status, whatsappText, reelsText, xText, diagStatus;
     private Button diagButton, diagSend;
-    private ProgressBar reelsBar, xBar;
+    private ProgressBar whatsappBar, reelsBar, xBar;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -40,6 +40,8 @@ public class MainActivity extends Activity {
         usage = new Usage(this);
 
         status = findViewById(R.id.status);
+        whatsappText = findViewById(R.id.whatsapp_text);
+        whatsappBar = findViewById(R.id.whatsapp_bar);
         reelsText = findViewById(R.id.reels_text);
         xText = findViewById(R.id.x_text);
         reelsBar = findViewById(R.id.reels_bar);
@@ -101,6 +103,12 @@ public class MainActivity extends Activity {
                 : "✗ Desactivada: seguí los pasos de abajo para activarla");
         status.setBackgroundColor(getColor(on ? R.color.ok : R.color.warn));
 
+        long earned = usage.earned();
+        whatsappText.setText("WhatsApp: " + Usage.format(usage.whatsapp()) + " → habilitaste "
+                + Usage.format(earned) + " de 15:00"
+                + (usage.fullyEarned() ? "  (completo)" : ""));
+        whatsappBar.setProgress((int) (earned / 1000));
+
         show(Kind.REELS, "Reels y lupa de Instagram, TikTok y Shorts de YouTube", reelsText, reelsBar);
         show(Kind.FOR_YOU, "Para ti de X", xText, xBar);
 
@@ -129,10 +137,15 @@ public class MainActivity extends Activity {
     }
 
     private void show(Kind k, String name, TextView text, ProgressBar bar) {
-        long used = Math.min(usage.used(k), Usage.LIMIT_MS);
+        long earned = usage.earned();
+        long used = Math.min(usage.used(k), earned);
         long remaining = usage.remaining(k);
-        text.setText(name + ": " + Usage.format(used) + " de 15:00"
-                + (remaining == 0 ? "  (límite alcanzado)" : "  (quedan " + Usage.format(remaining) + ")"));
+        String state;
+        if (remaining > 0) state = "  (quedan " + Usage.format(remaining) + ")";
+        else if (usage.fullyEarned()) state = "  (límite alcanzado)";
+        else state = "  (sin tiempo: usá WhatsApp)";
+        text.setText(name + ": " + Usage.format(used) + " de " + Usage.format(earned) + " habilitados" + state);
+        bar.setMax((int) Math.max(1, earned / 1000));
         bar.setProgress((int) (used / 1000));
     }
 

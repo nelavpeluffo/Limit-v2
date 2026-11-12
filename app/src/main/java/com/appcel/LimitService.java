@@ -186,13 +186,13 @@ public class LimitService extends AccessibilityService {
         usage = new Usage(this);
         overlay = new Overlay(this);
         tiktokLock1 = new Blocker(this, R.drawable.ic_lock,
-                () -> notice("Los videos de TikTok están bloqueados hasta mañana", Overlay.VIOLET));
+                () -> notice(lockedMsg("Los videos de TikTok están bloqueados"), Overlay.VIOLET));
         tiktokLock2 = new Blocker(this, R.drawable.ic_lock,
-                () -> notice("Los videos de TikTok están bloqueados hasta mañana", Overlay.VIOLET));
+                () -> notice(lockedMsg("Los videos de TikTok están bloqueados"), Overlay.VIOLET));
         shortsLock = new Blocker(this, R.drawable.ic_lock,
-                () -> notice("Shorts está bloqueado hasta mañana", Overlay.VIOLET));
+                () -> notice(lockedMsg("Shorts está bloqueado"), Overlay.VIOLET));
         blocker = new Blocker(this, R.drawable.ic_lock,
-                () -> notice("Reels está bloqueado hasta mañana", Overlay.VIOLET));
+                () -> notice(lockedMsg("Reels está bloqueado"), Overlay.VIOLET));
         searchBlocker = new Blocker(this, R.drawable.ic_search, this::openInstagramSearch);
         cover = new Cover(this);
         lockNotice = new LockNotice(this);
@@ -215,6 +215,7 @@ public class LimitService extends AccessibilityService {
             return;
         }
         boolean target = isTarget(pkg);
+        if (isWhatsApp(pkg)) startWhatsAppTicking();
         if (!target) {
             // Otra app pasó al frente (inicio del teléfono, otra app...): solo se mira
             // cuál app está abierta, para sacar el candado y el contador al instante.
@@ -355,7 +356,7 @@ public class LimitService extends AccessibilityService {
                     + " → " + (reel ? "es un Reel" : "no es un Reel"));
         }
         if (usage.remaining(Kind.REELS) > 0 || !reel) return;
-        notice("Reels está bloqueado hasta mañana", Overlay.VIOLET);
+        notice(lockedMsg("Reels está bloqueado"), Overlay.VIOLET);
         handler.postDelayed(() -> performGlobalAction(GLOBAL_ACTION_BACK), 300);
         handler.postDelayed(this::closeLeftoverPreview, 1200);
     }
@@ -430,8 +431,70 @@ public class LimitService extends AccessibilityService {
         handler.removeCallbacks(noticeToViolet);
         handler.removeCallbacks(noticeEnd);
         noticeUntil = SystemClock.elapsedRealtime() + RED_MS + VIOLET_MS;
-        overlay.show(Kind.FOR_YOU.label + ": límite de hoy alcanzado", true);
+        overlay.show(limitMsg(Kind.FOR_YOU), true);
         handler.postDelayed(noticeToViolet, RED_MS);  // roja 4 s, después violeta 4 s
+    }
+
+    /**
+     * "Reels está bloqueado" + hasta cuándo: si WhatsApp ya habilitó los 15 minutos del
+     * día, hasta mañana; si no, hasta que uses WhatsApp para habilitar más tiempo.
+     */
+    String lockedMsg(String what) {
+        return what + (usage.fullyEarned() ? " hasta mañana" : " · usá WhatsApp para habilitar tiempo");
+    }
+
+    /** Se terminó el tiempo de este contenido (el del día, o el habilitado hasta ahora). */
+    private String limitMsg(Kind k) {
+        return k.label + (usage.fullyEarned() ? ": límite de hoy alcanzado" : ": sin tiempo · usá WhatsApp");
+    }
+
+    // ------------------------------------------------------------- WhatsApp
+
+    /** WhatsApp y WhatsApp Business: el tiempo ahí habilita el de las redes. */
+    static final String[] WHATSAPP = {"com.whatsapp", "com.whatsapp.w4b"};
+
+    static boolean isWhatsApp(CharSequence pkg) {
+        if (pkg == null) return false;
+        for (String w : WHATSAPP) if (w.contentEquals(pkg)) return true;
+        return false;
+    }
+
+    private boolean waTicking;
+    private long waLastTick;
+    private final Runnable waTickRunnable = this::waTick;
+
+    private void startWhatsAppTicking() {
+        if (waTicking) return;
+        waTicking = true;
+        waLastTick = SystemClock.elapsedRealtime();
+        handler.postDelayed(waTickRunnable, TICK_MS);
+    }
+
+    /**
+     * Cada segundo, mientras WhatsApp esté al frente con la pantalla encendida, suma ese
+     * tiempo. Solo se mira qué app está abierta, nada de lo que hay en WhatsApp.
+     */
+    private void waTick() {
+        if (!waTicking) return;
+        long now = SystemClock.elapsedRealtime();
+        boolean inWhatsApp = false;
+        if (!paused) {
+            try {
+                PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+                if (pm == null || pm.isInteractive()) {
+                    AccessibilityNodeInfo root = getRootInActiveWindow();
+                    inWhatsApp = root != null && isWhatsApp(root.getPackageName());
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        if (!inWhatsApp) {
+            waTicking = false;
+            return;
+        }
+        usage.addWhatsApp(Math.min(now - waLastTick, 2500));
+        waLastTick = now;
+        handler.postDelayed(waTickRunnable, TICK_MS);
     }
 
     /** Globo con un mensaje: queda 4 s a la vista, para que dé tiempo a leerlo. */
@@ -565,11 +628,12 @@ public class LimitService extends AccessibilityService {
                 // En la lupa no: ahí ya no se llega a ver nada (el reloj te lleva al Inicio).
                 boolean igSearch = IG.equals(lastPkg) && ("lupa".equals(igSection) || "busqueda".equals(igSection));
                 if (k == Kind.REELS && !igSearch && now >= noticeUntil) {
-                    notice(k.label + ": límite de hoy alcanzado", Overlay.RED);
+                    notice(limitMsg(k), Overlay.RED);
                 }
                 enforce(k);
             } else {
                 enforceStreak = 0;
+                if (remaining > 60_000) usage.rearmWarned(k);
                 if (remaining <= 60_000 && usage.markWarned(k)) {
                     notice("Te queda 1 minuto de " + k.label, Overlay.RED);
                 }
@@ -782,7 +846,7 @@ public class LimitService extends AccessibilityService {
             // TikTok con el límite cumplido: candado sobre las pestañas de videos (Inicio y la
             // de al lado). Bandeja de entrada y Perfil quedan libres.
             List<AccessibilityNodeInfo> tabs = tiktokTabs(root);
-            String msg = "Los videos de TikTok están bloqueados hasta mañana";
+            String msg = lockedMsg("Los videos de TikTok están bloqueados");
             if (tabs != null) {
                 place(tiktokLock1, tabs.get(0), root, true, msg);
                 if (tiktokVideoTabs(tabs.size()) > 1) place(tiktokLock2, tabs.get(1), root, true, msg);
@@ -798,7 +862,7 @@ public class LimitService extends AccessibilityService {
         // YouTube con el límite cumplido: candado sobre el botón Shorts de la barra de abajo
         // (el resto de YouTube queda libre).
         if (root != null && YT.equals(pkg) && usage.remaining(Kind.REELS) <= 0) {
-            place(shortsLock, ytShortsTab(root), root, true, "Shorts está bloqueado hasta mañana");
+            place(shortsLock, ytShortsTab(root), root, true, lockedMsg("Shorts está bloqueado"));
         } else {
             shortsLock.hide();
         }
@@ -819,7 +883,7 @@ public class LimitService extends AccessibilityService {
                 AccessibilityNodeInfo searchReels = profileReelsTab(root);
                 if (searchReels != null && tabSelected(searchReels)) switchProfileToGrid(searchReels);
             }
-            String msg = "Reels está bloqueado hasta mañana";
+            String msg = lockedMsg("Reels está bloqueado");
             place(blocker, reelsTabButton(root), root, true, msg);
             place(searchBlocker, searchTabButton(root), root, true, msg);
             if (inSearchScreen(root)) place(backCatcher, searchBackArrow(root), root, false, "");
@@ -1386,7 +1450,7 @@ public class LimitService extends AccessibilityService {
             if (!profileReelsNoticed && now - lastProfileNotice > 20_000) {
                 profileReelsNoticed = true;
                 lastProfileNotice = now;
-                lockNotice.show();
+                lockNotice.show(lockedMsg("Reels bloqueados"));
             }
 
             boolean reelsSelected = selectedDeep(tabs.get(reels));
@@ -1406,7 +1470,7 @@ public class LimitService extends AccessibilityService {
                 if (!clickDown(tabs.get(0))) clickUp(tabs.get(0));
                 if (now - lastProfileNotice > 4000) {
                     lastProfileNotice = now;
-                    lockNotice.show();
+                    lockNotice.show(lockedMsg("Reels bloqueados"));
                 }
                 handler.postDelayed(this::checkProfileReels, 350);
             }
@@ -1432,7 +1496,7 @@ public class LimitService extends AccessibilityService {
         if (now - lastProfileNotice > 4000) {
             lastProfileNotice = now;
             profileReelsNoticed = true;
-            lockNotice.show();
+            lockNotice.show(lockedMsg("Reels bloqueados"));
         }
     }
 

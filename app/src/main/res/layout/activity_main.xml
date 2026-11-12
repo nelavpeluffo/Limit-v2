@@ -22,7 +22,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
-            android:text="15 minutos por día de Reels, TikTok y Shorts (compartidos), y de Para ti"
+            android:text="Cada minuto en WhatsApp habilita un minuto de Reels, TikTok y Shorts (compartidos) y un minuto de Para ti, hasta 15 minutos por día"
             android:textColor="@color/muted"
             android:textSize="15sp" />
 
@@ -52,6 +52,21 @@
                 android:textColor="@android:color/black"
                 android:textSize="17sp"
                 android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/whatsapp_text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:textColor="@android:color/black"
+                android:textSize="15sp" />
+
+            <ProgressBar
+                android:id="@+id/whatsapp_bar"
+                style="@android:style/Widget.Material.ProgressBar.Horizontal"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="900" />
 
             <TextView
                 android:id="@+id/reels_text"
@@ -202,7 +217,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:text="Limit solo mira los botones de las pestañas de Instagram (Reels y lupa), X (Para ti / Siguiendo) y YouTube (Shorts) para saber cuál está seleccionada, si está abierto un reproductor de Reels o de Shorts a pantalla completa, y si TikTok está abierto. No lee publicaciones ni mensajes, no guarda nada de lo que ves y no usa internet."
+            android:text="Limit 2 solo mira los botones de las pestañas de Instagram (Reels y lupa), X (Para ti / Siguiendo) y YouTube (Shorts) para saber cuál está seleccionada, si está abierto un reproductor de Reels o de Shorts a pantalla completa, y si TikTok o WhatsApp están abiertos. De WhatsApp solo cuenta el tiempo que está al frente: no lee chats ni mensajes. No lee publicaciones ni mensajes, no guarda nada de lo que ves y no usa internet."
             android:textColor="@color/muted"
             android:textSize="13sp" />
     </LinearLayout>
