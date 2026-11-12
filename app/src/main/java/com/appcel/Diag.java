@@ -191,6 +191,11 @@ final class Diag {
             }
             sb.append(" [scroll ").append(dirs).append(']');
         }
+        // Lugar en la lista (para ver cómo cuenta las publicaciones del Inicio).
+        AccessibilityNodeInfo.CollectionInfo list = n.getCollectionInfo();
+        if (list != null) sb.append(" [lista filas=").append(list.getRowCount()).append(']');
+        AccessibilityNodeInfo.CollectionItemInfo item = n.getCollectionItemInfo();
+        if (item != null) sb.append(" [fila ").append(item.getRowIndex()).append(']');
         if (!n.isVisibleToUser()) sb.append(" [oculto]");
         Rect r = new Rect();
         n.getBoundsInScreen(r);

@@ -495,6 +495,7 @@ public class LimitService extends AccessibilityService {
                 return;
             }
             int added = 0, headers = 0;
+            StringBuilder rows = Diag.recording() ? new StringBuilder() : null;
             for (String id : IG_POST_HEADER_IDS) {
                 List<AccessibilityNodeInfo> found = root.findAccessibilityNodeInfosByViewId(id);
                 if (found == null) continue;
@@ -502,11 +503,27 @@ public class LimitService extends AccessibilityService {
                     if (n == null || !n.isVisibleToUser()) continue;
                     headers++;
                     int row = rowOf(n);
-                    if (row >= 0 && feedRowsSeen.add(row)) added++;
+                    boolean isNew = row >= 0 && feedRowsSeen.add(row);
+                    if (isNew) added++;
+                    if (rows != null) {
+                        Rect b = new Rect();
+                        n.getBoundsInScreen(b);
+                        rows.append(' ').append(id.substring(id.indexOf('/') + 1))
+                                .append("@fila").append(row).append(isNew ? "(nueva)" : "")
+                                .append("@y").append(b.top);
+                    }
                 }
             }
-            if (headers == 0 || added == 0) {
-                if (Diag.recording() && down) note("Inicio: encabezados a la vista=" + headers + ", nuevos=" + added);
+            if (rows != null) {
+                // Solo números y nombres internos: nada de lo que dice la publicación.
+                AccessibilityNodeInfo src = e.getSource();
+                String srcId = src == null ? null : src.getViewIdResourceName();
+                note("Inicio scroll: dy=" + (android.os.Build.VERSION.SDK_INT >= 28 ? e.getScrollDeltaY() : 0)
+                        + " desde=" + e.getFromIndex() + " hasta=" + e.getToIndex()
+                        + " items=" + e.getItemCount()
+                        + " lista=" + (srcId == null ? "?" : srcId.substring(srcId.indexOf('/') + 1))
+                        + " encabezados=" + headers + " nuevos=" + added
+                        + " total=" + usage.feedPosts() + " |" + rows);
             }
             if (added > 0) {
                 usage.addFeedPosts(added);
