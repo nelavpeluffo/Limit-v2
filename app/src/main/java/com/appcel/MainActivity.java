@@ -17,7 +17,7 @@ import android.widget.TextView;
 public class MainActivity extends Activity {
 
     private static final String LATEST_APK_URL =
-            "https://github.com/nelavpeluffo/Limit/releases/latest/download/Limit.apk";
+            "https://github.com/nelavpeluffo/Limit-v2/releases/latest/download/Limit-v2.apk";
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable refresh = new Runnable() {

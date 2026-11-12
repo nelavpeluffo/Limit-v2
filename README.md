@@ -1,4 +1,6 @@
-# Limit
+# Limit 2
+
+Versión aparte de [Limit](https://github.com/nelavpeluffo/Limit) para probar funciones nuevas. Se instala como otra app (`com.appcel.v2`), así que puede convivir con Limit en el mismo teléfono.
 
 App para Android que limita a **15 minutos por día**:
 
@@ -17,14 +19,14 @@ El resto de Instagram y X (feed, historias, mensajes, la pestaña *Siguiendo*) s
 
 ## Instalarla
 
-1. Descargá **Limit.apk** desde [la última versión](../../releases/latest).
+1. Descargá **Limit-v2.apk** desde [la última versión](../../releases/latest).
 2. Abrí el archivo. Si Android pregunta, permití instalar apps desde esa fuente (Chrome o Archivos).
-3. Abrí Limit y seguí los pasos de la pantalla para activarla en **Accesibilidad**.
+3. Abrí Limit 2 y seguí los pasos de la pantalla para activarla en **Accesibilidad**.
 4. Si Android dice **«Configuración restringida»**: en Limit tocá «Abrir info de la app» → menú ⋮ arriba a la derecha → «Permitir configuración restringida». Después volvé a activarla en Accesibilidad.
 
 ## Actualizar
 
-Con [Obtainium](https://github.com/ImranR98/Obtainium) (agregando `https://github.com/nelavpeluffo/Limit`) avisa y actualiza con un toque. También se puede desde Limit: **Descargar la última versión**, abrir el archivo y tocar **Actualizar**. No hace falta volver a activarla.
+Con [Obtainium](https://github.com/ImranR98/Obtainium) (agregando `https://github.com/nelavpeluffo/Limit-v2`) avisa y actualiza con un toque. También se puede desde Limit 2: **Descargar la última versión**, abrir el archivo y tocar **Actualizar**. No hace falta volver a activarla.
 
 ## Privacidad
 

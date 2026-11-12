@@ -32,7 +32,7 @@
 
         <provider
             android:name=".DiagProvider"
-            android:authorities="com.appcel.diag"
+            android:authorities="${applicationId}.diag"
             android:exported="false"
             android:grantUriPermissions="true" />
     </application>

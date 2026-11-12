@@ -9,7 +9,8 @@ android {
     compileSdk 35
 
     defaultConfig {
-        applicationId "com.appcel"
+        // Distinto de Limit (com.appcel) para poder tener las dos apps instaladas a la vez.
+        applicationId "com.appcel.v2"
         minSdk 26
         targetSdk 34
         versionCode buildNumber

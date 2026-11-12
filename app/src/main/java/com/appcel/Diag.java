@@ -47,7 +47,7 @@ final class Diag {
             version = c.getPackageManager().getPackageInfo(c.getPackageName(), 0).versionName;
         } catch (Exception ignored) {
         }
-        note(c, "Limit " + version);
+        note(c, "Limit 2 " + version);
     }
 
     static void stop() {
