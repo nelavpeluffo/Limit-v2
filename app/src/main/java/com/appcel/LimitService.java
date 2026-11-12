@@ -341,6 +341,7 @@ public class LimitService extends AccessibilityService {
         if (leaving) { leaving = false; setKeyboardHidden(false); }
         feedRowsSeen.clear();   // al volver, Instagram puede traer otras publicaciones
         feedScrollToken++;      // si estaba subiendo el Inicio, deja de hacerlo
+        feedScrollingUp = false;
         hideFeedPill();
         xCovered = false;
         cancelNotice();
@@ -484,7 +485,9 @@ public class LimitService extends AccessibilityService {
     private final Runnable feedSettled = () -> {
         try {
             AccessibilityNodeInfo root = getRootInActiveWindow();
-            if (root != null && IG.contentEquals(root.getPackageName())) countFeed(root, null);
+            if (root == null || !IG.contentEquals(root.getPackageName())) return;
+            if (usage.feedLimitReached()) enforceFeedTop(root);
+            else countFeed(root, null);
         } catch (Exception ignored) {
         }
     };
@@ -496,23 +499,40 @@ public class LimitService extends AccessibilityService {
     private void onFeedScroll(AccessibilityEvent e) {
         long now = SystemClock.elapsedRealtime();
         boolean limit = usage.feedLimitReached();
-        boolean down = android.os.Build.VERSION.SDK_INT < 28 || e.getScrollDeltaY() > 0;
         // Cuando el Inicio se queda quieto se revisa una vez más: un deslizamiento rápido
         // puede terminar entre dos revisiones, y ahí se perdía la publicación nueva.
         handler.removeCallbacks(feedSettled);
         handler.postDelayed(feedSettled, 300);
-        if (!limit && now - lastFeedCheck < 120) return;
+        if (now - lastFeedCheck < 120) return;
         lastFeedCheck = now;
         try {
             AccessibilityNodeInfo root = getRootInActiveWindow();
             if (root == null || !IG.contentEquals(root.getPackageName())) return;
             if (limit) {
-                if (down && homeSelected(root) && !reelsPlayerFullScreen(root)) snapFeedToTop(root, e.getSource());
+                enforceFeedTop(root);
                 return;
             }
             countFeed(root, e);
         } catch (Exception ignored) {
         }
+    }
+
+    /**
+     * Con las 30 publicaciones del día ya vistas: si el Inicio no está arriba de todo
+     * (porque intentaste bajar), se lo sube. Se mira si la lista todavía puede subir,
+     * no hacia dónde se movió: la lista de Instagram no informa cuánto se desplazó.
+     */
+    private void enforceFeedTop(AccessibilityNodeInfo root) {
+        if (feedScrollingUp) return;   // ya está subiendo
+        if (!homeSelected(root) || reelsPlayerFullScreen(root)) return;
+        Rect screen = new Rect();
+        root.getBoundsInScreen(screen);
+        AccessibilityNodeInfo list = findVerticalList(root, screen);
+        if (list == null) {
+            note("Inicio: límite cumplido, pero no encontré la lista para subirla");
+            return;
+        }
+        if (canScrollBack(list)) snapFeedToTop(root, list);
     }
 
     /** Suma al contador cada nombre de cuenta (encabezado de publicación) nuevo a la vista. */
@@ -588,7 +608,7 @@ public class LimitService extends AccessibilityService {
     /** Lleva el Inicio arriba de todo (como tocar el botón Inicio) y avisa por qué. */
     private void snapFeedToTop(AccessibilityNodeInfo root, AccessibilityNodeInfo list) {
         long now = SystemClock.elapsedRealtime();
-        if (now - lastFeedSnap < 600) return;
+        if (now - lastFeedSnap < 250) return;
         lastFeedSnap = now;
         updateFeedPill(root, IG);
         note("Inicio: límite de publicaciones, vuelvo arriba");
@@ -600,11 +620,17 @@ public class LimitService extends AccessibilityService {
         AccessibilityNodeInfo vertical = findVerticalList(root, screen);
         if (vertical != null) list = vertical;
         if (list == null) return;
+        if (Diag.recording()) {
+            String id = list.getViewIdResourceName();
+            note("Inicio: subo la lista " + (id == null ? "?" : id.substring(id.indexOf('/') + 1)));
+        }
         feedScrollToken++;
+        feedScrollingUp = true;
         scrollFeedUp(list, 0, feedScrollToken);
     }
 
     private int feedScrollToken;   // cambia en cada subida: la anterior deja de seguir
+    private boolean feedScrollingUp;   // subiendo el Inicio ahora mismo
 
     private Overlay feedPill;       // "N/30" en el Inicio de Instagram
     private String feedPillText;    // lo que muestra ahora (null: no está a la vista)
@@ -643,12 +669,18 @@ public class LimitService extends AccessibilityService {
      * movimiento continuo hacia arriba. Al llegar arriba de todo, para.
      */
     private void scrollFeedUp(AccessibilityNodeInfo list, int attempt, int token) {
-        if (attempt >= 80 || token != feedScrollToken) return;
+        if (token != feedScrollToken) return;   // la reemplazó otra subida
+        boolean more = false;
         try {
             list.refresh();
-            if (!canScrollBack(list)) return;   // ya está arriba de todo
-            if (!list.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)) return;
+            // Si no puede subir más, ya está arriba de todo.
+            more = attempt < 80 && canScrollBack(list)
+                    && list.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD);
+            if (!more && attempt == 0) note("Inicio: la lista no aceptó subir");
         } catch (Exception ignored) {
+        }
+        if (!more) {
+            feedScrollingUp = false;
             return;
         }
         handler.postDelayed(() -> scrollFeedUp(list, attempt + 1, token), 140);
