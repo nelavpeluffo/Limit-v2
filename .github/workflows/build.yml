@@ -31,7 +31,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cp app/build/outputs/apk/release/app-release.apk Limit-v2.apk
-          gh release create "v1.0.${{ github.run_number }}" Limit-v2.apk \
-            --title "Limit 2 v1.0.${{ github.run_number }}" \
+          # Prefijo v2.0 para no chocar con las etiquetas v1.0.N heredadas de Limit.
+          gh release create "v2.0.${{ github.run_number }}" Limit-v2.apk \
+            --target "${{ github.sha }}" \
+            --title "Limit 2 v2.0.${{ github.run_number }}" \
             --notes "Descargá **Limit-v2.apk** desde el celular e instalalo. Las versiones nuevas se instalan encima de la anterior." \
             --latest
