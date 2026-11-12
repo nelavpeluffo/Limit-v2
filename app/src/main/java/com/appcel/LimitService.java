@@ -525,14 +525,45 @@ public class LimitService extends AccessibilityService {
     private void enforceFeedTop(AccessibilityNodeInfo root) {
         if (feedScrollingUp) return;   // ya está subiendo
         if (!homeSelected(root) || reelsPlayerFullScreen(root)) return;
-        Rect screen = new Rect();
-        root.getBoundsInScreen(screen);
-        AccessibilityNodeInfo list = findVerticalList(root, screen);
+        AccessibilityNodeInfo list = findFeedList(root);
         if (list == null) {
             note("Inicio: límite cumplido, pero no encontré la lista para subirla");
             return;
         }
         if (canScrollBack(list)) snapFeedToTop(root, list);
+    }
+
+    /**
+     * La lista de publicaciones del Inicio. Ojo: por fuera de ella Instagram tiene otra
+     * lista alta (la que pasa de una página a otra, con una sola fila) que no sube; por
+     * eso se busca la lista que contiene los encabezados de las publicaciones o, si no
+     * hay ninguno a la vista, la que se llama "list" y tiene varias filas.
+     */
+    private static AccessibilityNodeInfo findFeedList(AccessibilityNodeInfo root) {
+        for (String id : IG_POST_HEADER_IDS) {
+            List<AccessibilityNodeInfo> found = root.findAccessibilityNodeInfosByViewId(id);
+            if (found == null) continue;
+            for (AccessibilityNodeInfo n : found) {
+                AccessibilityNodeInfo cur = n == null ? null : n.getParent();
+                for (int i = 0; cur != null && i < 12; i++) {
+                    if (cur.isScrollable() && feedLike(cur)) return cur;
+                    cur = cur.getParent();
+                }
+            }
+        }
+        List<AccessibilityNodeInfo> lists = root.findAccessibilityNodeInfosByViewId(IG + ":id/list");
+        if (lists != null) {
+            for (AccessibilityNodeInfo l : lists) {
+                if (l != null && l.isVisibleToUser() && l.isScrollable() && feedLike(l)) return l;
+            }
+        }
+        return null;
+    }
+
+    /** Una lista de varias filas (no la de páginas, que tiene una sola). */
+    private static boolean feedLike(AccessibilityNodeInfo n) {
+        AccessibilityNodeInfo.CollectionInfo info = n.getCollectionInfo();
+        return info == null || info.getRowCount() != 1;
     }
 
     /** Suma al contador cada nombre de cuenta (encabezado de publicación) nuevo a la vista. */
@@ -615,10 +646,8 @@ public class LimitService extends AccessibilityService {
         // No se toca el botón Inicio: en Instagram eso además actualiza el Inicio. Se sube
         // la lista de a una pantalla, con su animación, y se frena justo arriba de todo
         // (sin pasarse, así no parece que tiraste hacia abajo para actualizar).
-        Rect screen = new Rect();
-        root.getBoundsInScreen(screen);
-        AccessibilityNodeInfo vertical = findVerticalList(root, screen);
-        if (vertical != null) list = vertical;
+        AccessibilityNodeInfo feed = findFeedList(root);
+        if (feed != null) list = feed;
         if (list == null) return;
         if (Diag.recording()) {
             String id = list.getViewIdResourceName();
