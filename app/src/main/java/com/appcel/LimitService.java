@@ -753,12 +753,24 @@ public class LimitService extends AccessibilityService {
         }
         long now = usage.earned() - waEarnedAtOpen;
         if (usage.fullyEarned()) {
-            waPill.show(now > 0 ? "Ganaste " + Usage.format(now) + " · ya tenés los 15:00 de hoy"
-                    : "Ya ganaste los 15:00 de hoy", Overlay.VIOLET);
+            // Con los 15 minutos ya ganados el reloj no sigue. Se avisa una sola vez por
+            // día, 4 s, como los demás globos; después no aparece más en WhatsApp.
+            long t = SystemClock.elapsedRealtime();
+            if (usage.markOnce("wa_full")) {
+                waPill.showGlowing("Ya ganaste los 15:00 de hoy", Overlay.VIOLET);
+                waNoticeUntil = t + NOTICE_MS;
+                handler.postDelayed(() -> {
+                    if (SystemClock.elapsedRealtime() >= waNoticeUntil) waPill.hide();
+                }, NOTICE_MS);
+            } else if (t >= waNoticeUntil) {
+                waPill.hide();
+            }
         } else {
             waPill.show("Ganaste " + Usage.format(now), Overlay.DARK);
         }
     }
+
+    private long waNoticeUntil;   // hasta cuándo se ve el aviso "Ya ganaste los 15:00"
 
     /**
      * Cada segundo, mientras WhatsApp esté al frente con la pantalla encendida, suma ese

@@ -102,6 +102,15 @@ final class Usage {
         return true;
     }
 
+    /** Devuelve true solo la primera vez del día para esta clave (avisos de una sola vez). */
+    boolean markOnce(String name) {
+        ensureToday();
+        String key = "once_" + name;
+        if (prefs.getBoolean(key, false)) return false;
+        prefs.edit().putBoolean(key, true).apply();
+        return true;
+    }
+
     /** Volvió a haber más de 1 minuto (WhatsApp habilitó más): se puede volver a avisar. */
     void rearmWarned(Kind k) {
         ensureToday();
