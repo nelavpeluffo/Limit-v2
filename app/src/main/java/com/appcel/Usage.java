@@ -59,6 +59,25 @@ final class Usage {
         prefs.edit().putLong(KEY_WHATSAPP, prefs.getLong(KEY_WHATSAPP, 0) + ms).apply();
     }
 
+    /** Publicaciones del Inicio de Instagram que se pueden ver por día. */
+    static final int FEED_POSTS_LIMIT = 30;
+    private static final String KEY_FEED = "feed_posts";
+
+    int feedPosts() {
+        ensureToday();
+        return prefs.getInt(KEY_FEED, 0);
+    }
+
+    void addFeedPosts(int n) {
+        if (n <= 0) return;
+        ensureToday();
+        prefs.edit().putInt(KEY_FEED, prefs.getInt(KEY_FEED, 0) + n).apply();
+    }
+
+    boolean feedLimitReached() {
+        return feedPosts() >= FEED_POSTS_LIMIT;
+    }
+
     /** Ya se habilitaron los 15 minutos del día: lo que se bloquee queda así hasta mañana. */
     boolean fullyEarned() {
         return earned() >= LIMIT_MS;

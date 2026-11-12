@@ -29,9 +29,9 @@ public class MainActivity extends Activity {
     };
 
     private Usage usage;
-    private TextView status, whatsappText, reelsText, xText, diagStatus;
+    private TextView status, whatsappText, reelsText, xText, feedText, diagStatus;
     private Button diagButton, diagSend;
-    private ProgressBar whatsappBar, reelsBar, xBar;
+    private ProgressBar whatsappBar, reelsBar, xBar, feedBar;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -42,6 +42,8 @@ public class MainActivity extends Activity {
         status = findViewById(R.id.status);
         whatsappText = findViewById(R.id.whatsapp_text);
         whatsappBar = findViewById(R.id.whatsapp_bar);
+        feedText = findViewById(R.id.feed_text);
+        feedBar = findViewById(R.id.feed_bar);
         reelsText = findViewById(R.id.reels_text);
         xText = findViewById(R.id.x_text);
         reelsBar = findViewById(R.id.reels_bar);
@@ -111,6 +113,11 @@ public class MainActivity extends Activity {
 
         show(Kind.REELS, "Reels y lupa de Instagram, TikTok y Shorts de YouTube", reelsText, reelsBar);
         show(Kind.FOR_YOU, "Para ti de X", xText, xBar);
+
+        int posts = Math.min(usage.feedPosts(), Usage.FEED_POSTS_LIMIT);
+        feedText.setText("Inicio de Instagram: " + posts + " de " + Usage.FEED_POSTS_LIMIT + " publicaciones"
+                + (usage.feedLimitReached() ? "  (límite alcanzado)" : ""));
+        feedBar.setProgress(posts);
 
         if (Diag.recording()) {
             diagStatus.setText("Grabando… quedan " + Usage.format(Diag.remainingMs())

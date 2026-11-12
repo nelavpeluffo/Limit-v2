@@ -15,6 +15,7 @@ import android.widget.Toast;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 
@@ -244,7 +245,9 @@ public class LimitService extends AccessibilityService {
             if (dmPlayerStable) return;
         }
         if (e.getEventType() == AccessibilityEvent.TYPE_VIEW_SCROLLED) {
-            // Los deslizamientos solo importan en un Reel abierto desde un mensaje.
+            // En el Inicio de Instagram se cuentan las publicaciones (máximo 30 por día).
+            if (IG.contentEquals(pkg)) onFeedScroll(e);
+            // Los demás deslizamientos solo importan en un Reel abierto desde un mensaje.
             long nowS = SystemClock.elapsedRealtime();
             if (IG.contentEquals(pkg) && nowS - lastScrollCheck > 150) {
                 lastScrollCheck = nowS;
@@ -332,6 +335,7 @@ public class LimitService extends AccessibilityService {
         dmPlayerStable = false;
         profileReelsNoticed = false;
         if (leaving) { leaving = false; setKeyboardHidden(false); }
+        feedRowsSeen.clear();   // al volver, Instagram puede traer otras publicaciones
         xCovered = false;
         cancelNotice();
         overlay.hide();
@@ -446,6 +450,97 @@ public class LimitService extends AccessibilityService {
     /** Se terminó el tiempo de este contenido (el del día, o el habilitado hasta ahora). */
     private String limitMsg(Kind k) {
         return k.label + (usage.fullyEarned() ? ": límite de hoy alcanzado" : ": sin tiempo · usá WhatsApp");
+    }
+
+    // ------------------------------------------------- Inicio de Instagram
+
+    /**
+     * Encabezado de cada publicación del Inicio (la fila con la foto y el nombre de la
+     * cuenta). Solo se usa para saber que hay una publicación y en qué lugar de la lista
+     * está; no se lee el nombre ni nada de la publicación.
+     */
+    static final String[] IG_POST_HEADER_IDS = {
+            IG + ":id/row_feed_profile_header",
+            IG + ":id/row_feed_photo_profile_name",
+    };
+
+    /** Lugares de la lista del Inicio ya contados en esta visita a Instagram. */
+    private final HashSet<Integer> feedRowsSeen = new HashSet<>();
+    private long lastFeedCheck;
+    private long lastFeedSnap;
+
+    /**
+     * Deslizando el Inicio: cuenta las publicaciones nuevas que aparecen. Con las 30 del
+     * día ya vistas, cada intento de bajar te devuelve arriba de todo.
+     */
+    private void onFeedScroll(AccessibilityEvent e) {
+        long now = SystemClock.elapsedRealtime();
+        boolean limit = usage.feedLimitReached();
+        boolean down = android.os.Build.VERSION.SDK_INT < 28 || e.getScrollDeltaY() > 0;
+        // Con el límite cumplido se reacciona enseguida; si no, alcanza con revisar cada 0,25 s.
+        if (!limit && now - lastFeedCheck < 250) return;
+        lastFeedCheck = now;
+        try {
+            AccessibilityNodeInfo root = getRootInActiveWindow();
+            if (root == null || !IG.contentEquals(root.getPackageName())) return;
+            if (!homeSelected(root) || reelsPlayerFullScreen(root)) return;
+            if (limit) {
+                if (down) snapFeedToTop(root, e.getSource());
+                return;
+            }
+            int added = 0, headers = 0;
+            for (String id : IG_POST_HEADER_IDS) {
+                List<AccessibilityNodeInfo> found = root.findAccessibilityNodeInfosByViewId(id);
+                if (found == null) continue;
+                for (AccessibilityNodeInfo n : found) {
+                    if (n == null || !n.isVisibleToUser()) continue;
+                    headers++;
+                    int row = rowOf(n);
+                    if (row >= 0 && feedRowsSeen.add(row)) added++;
+                }
+            }
+            if (headers == 0 || added == 0) {
+                if (Diag.recording() && down) note("Inicio: encabezados a la vista=" + headers + ", nuevos=" + added);
+            }
+            if (added > 0) {
+                usage.addFeedPosts(added);
+                int seen = usage.feedPosts();
+                note("Inicio: " + seen + " publicaciones vistas hoy");
+                if (seen >= Usage.FEED_POSTS_LIMIT) {
+                    snapFeedToTop(root, e.getSource());
+                } else if (Usage.FEED_POSTS_LIMIT - seen <= 5 && now >= noticeUntil) {
+                    notice("Inicio: te quedan " + (Usage.FEED_POSTS_LIMIT - seen) + " publicaciones", Overlay.RED);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Lleva el Inicio arriba de todo (como tocar el botón Inicio) y avisa por qué. */
+    private void snapFeedToTop(AccessibilityNodeInfo root, AccessibilityNodeInfo list) {
+        long now = SystemClock.elapsedRealtime();
+        if (now - lastFeedSnap < 600) return;
+        lastFeedSnap = now;
+        if (now >= noticeUntil) {
+            notice("Inicio: ya viste las " + Usage.FEED_POSTS_LIMIT + " publicaciones de hoy", Overlay.VIOLET);
+        }
+        note("Inicio: límite de publicaciones, vuelvo arriba");
+        // Tocar Inicio estando en el Inicio lo sube arriba de todo. Por las dudas, además
+        // se sube la lista de a una pantalla hasta llegar al principio.
+        clickHome(root);
+        if (list != null) scrollFeedUp(list, 0);
+    }
+
+    private void scrollFeedUp(AccessibilityNodeInfo list, int attempt) {
+        if (attempt >= 40) return;
+        try {
+            list.refresh();
+            if (!canScrollBack(list)) return;   // ya está arriba de todo
+            if (!list.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)) return;
+        } catch (Exception ignored) {
+            return;
+        }
+        handler.postDelayed(() -> scrollFeedUp(list, attempt + 1), 60);
     }
 
     // ------------------------------------------------------------- WhatsApp

@@ -4,6 +4,8 @@ Versión aparte de [Limit](https://github.com/nelavpeluffo/Limit) para probar fu
 
 **Lo nuevo de Limit 2: el tiempo en redes se gana usando WhatsApp.** Cada minuto con WhatsApp (o WhatsApp Business) abierto habilita un minuto de Reels/lupa/TikTok/Shorts (compartidos) y, aparte, un minuto de *Para ti* de X, hasta los 15 minutos del día. Por ejemplo: 2 minutos de WhatsApp habilitan 2 minutos de Instagram y compañía y 2 minutos de X. Sin uso de WhatsApp, esas secciones quedan bloqueadas desde el principio del día. De WhatsApp solo se cuenta el tiempo que está al frente con la pantalla encendida; no se leen chats ni mensajes.
 
+**Inicio de Instagram: 30 publicaciones por día.** Limit 2 cuenta las publicaciones que van apareciendo al deslizar el Inicio. Cuando quedan 5 avisa, y al llegar a 30 te sube arriba de todo: cada vez que intentás bajar, vuelve arriba. Historias, mensajes y el resto de Instagram siguen funcionando. Para contar solo se mira el encabezado de cada publicación (sin leer el nombre ni el contenido). El contador se reinicia a la medianoche.
+
 App para Android que limita a **15 minutos por día**:
 
 - los **Reels de video** de Instagram (la pestaña Reels y los que abrís desde la lupa, el feed o mensajes) y la **lupa** (Explorar), que comparten los mismos 15 minutos. Todo lo que abrís desde la lupa cuenta (también fotos y carruseles); en el resto de Instagram, las fotos y carruseles que aparecen en el reproductor no cuentan.
