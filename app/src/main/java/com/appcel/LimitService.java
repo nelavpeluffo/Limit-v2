@@ -154,6 +154,7 @@ public class LimitService extends AccessibilityService {
     private static final long VIOLET_MS = 4000;
     private final Runnable noticeToViolet = () -> {
         if (SystemClock.elapsedRealtime() >= noticeUntil) return;
+        overlay.setIcon(0);
         overlay.showGlowing("Siguiendo", Overlay.VIOLET);
         // Los 4 s se cuentan desde que aparece la violeta (no desde la roja).
         noticeUntil = SystemClock.elapsedRealtime() + VIOLET_MS;
@@ -186,6 +187,9 @@ public class LimitService extends AccessibilityService {
         AppSettings.setPaused(this, false);   // la pausa desde la app ya no existe
         usage = new Usage(this);
         overlay = new Overlay(this);
+        waPill = new Overlay(this);
+        waPill.setIcon(R.drawable.ic_clock);
+        feedPill = new Overlay(this);
         tiktokLock1 = new Blocker(this, R.drawable.ic_lock,
                 () -> notice(lockedMsg("Los videos de TikTok están bloqueados"), Overlay.VIOLET));
         tiktokLock2 = new Blocker(this, R.drawable.ic_lock,
@@ -336,6 +340,7 @@ public class LimitService extends AccessibilityService {
         profileReelsNoticed = false;
         if (leaving) { leaving = false; setKeyboardHidden(false); }
         feedRowsSeen.clear();   // al volver, Instagram puede traer otras publicaciones
+        hideFeedPill();
         xCovered = false;
         cancelNotice();
         overlay.hide();
@@ -435,6 +440,7 @@ public class LimitService extends AccessibilityService {
         handler.removeCallbacks(noticeToViolet);
         handler.removeCallbacks(noticeEnd);
         noticeUntil = SystemClock.elapsedRealtime() + RED_MS + VIOLET_MS;
+        overlay.setIcon(0);
         overlay.show(limitMsg(Kind.FOR_YOU), true);
         handler.postDelayed(noticeToViolet, RED_MS);  // roja 4 s, después violeta 4 s
     }
@@ -506,11 +512,8 @@ public class LimitService extends AccessibilityService {
                 usage.addFeedPosts(added);
                 int seen = usage.feedPosts();
                 note("Inicio: " + seen + " publicaciones vistas hoy");
-                if (seen >= Usage.FEED_POSTS_LIMIT) {
-                    snapFeedToTop(root, e.getSource());
-                } else if (Usage.FEED_POSTS_LIMIT - seen <= 5 && now >= noticeUntil) {
-                    notice("Inicio: te quedan " + (Usage.FEED_POSTS_LIMIT - seen) + " publicaciones", Overlay.RED);
-                }
+                updateFeedPill(root, IG);
+                if (seen >= Usage.FEED_POSTS_LIMIT) snapFeedToTop(root, e.getSource());
             }
         } catch (Exception ignored) {
         }
@@ -521,14 +524,44 @@ public class LimitService extends AccessibilityService {
         long now = SystemClock.elapsedRealtime();
         if (now - lastFeedSnap < 600) return;
         lastFeedSnap = now;
-        if (now >= noticeUntil) {
-            notice("Inicio: ya viste las " + Usage.FEED_POSTS_LIMIT + " publicaciones de hoy", Overlay.VIOLET);
-        }
+        updateFeedPill(root, IG);
         note("Inicio: límite de publicaciones, vuelvo arriba");
         // Tocar Inicio estando en el Inicio lo sube arriba de todo. Por las dudas, además
         // se sube la lista de a una pantalla hasta llegar al principio.
         clickHome(root);
         if (list != null) scrollFeedUp(list, 0);
+    }
+
+    private Overlay feedPill;       // "N/30" en el Inicio de Instagram
+    private String feedPillText;    // lo que muestra ahora (null: no está a la vista)
+
+    /**
+     * En el Inicio de Instagram, un globo como el del reloj con las publicaciones vistas
+     * hoy: "1/30". Rojo cuando quedan 5 o menos, violeta y con brillo al llegar a 30.
+     */
+    private void updateFeedPill(AccessibilityNodeInfo root, String pkg) {
+        boolean show = false;
+        try {
+            show = root != null && IG.equals(pkg) && AppSettings.overlayEnabled(this)
+                    && homeSelected(root) && !reelsPlayerFullScreen(root);
+        } catch (Exception ignored) {
+        }
+        if (!show) {
+            hideFeedPill();
+            return;
+        }
+        int limit = Usage.FEED_POSTS_LIMIT;
+        int seen = Math.min(usage.feedPosts(), limit);
+        String text = seen + "/" + limit;
+        if (text.equals(feedPillText)) return;
+        feedPillText = text;
+        if (seen >= limit) feedPill.showGlowing(text, Overlay.VIOLET);
+        else feedPill.show(text, limit - seen <= 5);
+    }
+
+    private void hideFeedPill() {
+        feedPillText = null;
+        if (feedPill != null) feedPill.hide();
     }
 
     private void scrollFeedUp(AccessibilityNodeInfo list, int attempt) {
@@ -554,6 +587,7 @@ public class LimitService extends AccessibilityService {
         return false;
     }
 
+    private Overlay waPill;   // reloj que sube mientras estás en WhatsApp
     private boolean waTicking;
     private long waLastTick;
     private final Runnable waTickRunnable = this::waTick;
@@ -562,7 +596,19 @@ public class LimitService extends AccessibilityService {
         if (waTicking) return;
         waTicking = true;
         waLastTick = SystemClock.elapsedRealtime();
+        showWhatsAppPill();
         handler.postDelayed(waTickRunnable, TICK_MS);
+    }
+
+    /** "Ganaste 2:13 de 15:00", con el reloj, sumando cada segundo. */
+    private void showWhatsAppPill() {
+        if (!AppSettings.overlayEnabled(this)) {
+            waPill.hide();
+            return;
+        }
+        long earned = usage.earned();
+        if (usage.fullyEarned()) waPill.show("Ganaste " + Usage.format(earned) + " · completo", Overlay.VIOLET);
+        else waPill.show("Ganaste " + Usage.format(earned) + " de 15:00", Overlay.DARK);
     }
 
     /**
@@ -585,10 +631,12 @@ public class LimitService extends AccessibilityService {
         }
         if (!inWhatsApp) {
             waTicking = false;
+            waPill.hide();
             return;
         }
         usage.addWhatsApp(Math.min(now - waLastTick, 2500));
         waLastTick = now;
+        showWhatsAppPill();
         handler.postDelayed(waTickRunnable, TICK_MS);
     }
 
@@ -596,6 +644,7 @@ public class LimitService extends AccessibilityService {
     private void notice(String text, int color) {
         handler.removeCallbacks(noticeToViolet);
         handler.removeCallbacks(noticeEnd);
+        overlay.setIcon(0);
         overlay.show(text, color);
         noticeUntil = SystemClock.elapsedRealtime() + NOTICE_MS;
         handler.postDelayed(noticeEnd, NOTICE_MS);
@@ -649,6 +698,8 @@ public class LimitService extends AccessibilityService {
             cover.disarm();
             cancelNotice();
             overlay.hide();
+            hideFeedPill();
+            waPill.hide();
             setKeyboardHidden(false);
             stopTicking();
         } catch (Exception ignored) {
@@ -701,6 +752,7 @@ public class LimitService extends AccessibilityService {
         boolean xLimitLive = X.equals(lastPkg) && usage.remaining(Kind.FOR_YOU) <= 0;
         if (Diag.recording() && lastPkg != null && !xLimitLive) {
             String what = k == Kind.NONE ? "nada" : k.label;
+            overlay.setIcon(0);
             overlay.show("Diagnóstico · detecto: " + what, false);
             prevKind = k;
             lastTick = now;
@@ -735,7 +787,9 @@ public class LimitService extends AccessibilityService {
                 if (now < noticeUntil) {
                     // Hay un mensaje a la vista: el contador espera a que termine.
                 } else if (AppSettings.overlayEnabled(this)) {
-                    overlay.show(k.label + " · quedan " + Usage.format(remaining), remaining <= 60_000);
+                    // El mismo reloj que sube en WhatsApp, acá bajando: lo que queda de lo ganado.
+                    overlay.setIcon(R.drawable.ic_clock);
+                    overlay.show(Usage.format(remaining) + " · " + k.label, remaining <= 60_000);
                 } else {
                     overlay.hide();
                 }
@@ -935,6 +989,7 @@ public class LimitService extends AccessibilityService {
 
     /** Pone o saca la tapa con candado sobre el botón de Reels o de Para ti. */
     private void updateBlocker(AccessibilityNodeInfo root, String pkg) {
+        updateFeedPill(root, pkg);
         if (root != null && IG.equals(pkg)) updateDmReel(root);
         else dmCatcher.hide();
         if (root != null && isTikTok(pkg) && usage.remaining(Kind.REELS) <= 0) {

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Reloj de las pastillitas: en WhatsApp sube (tiempo ganado), en Reels y Para ti baja. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Aro -->
+    <path
+        android:pathData="M12,3 A9,9 0 1,1 12,21 A9,9 0 1,1 12,3 Z"
+        android:strokeWidth="2.2"
+        android:strokeColor="#FFFFFF" />
+    <!-- Agujas -->
+    <path
+        android:pathData="M12,7.5 L12,12 L15.2,14"
+        android:strokeWidth="2.2"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>
